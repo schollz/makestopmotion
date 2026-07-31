@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 404 64" role="img" aria-labelledby="title desc">
+  <title id="title">makestopmotion.com</title>
+  <desc id="desc">Two animation frames with a playful orange clay character beside the makestopmotion.com wordmark.</desc>
+  <g>
+    <rect x="2" y="2" width="60" height="60" rx="14" fill="#fff8e8"/>
+    <rect x="8" y="8" width="37" height="37" rx="8" fill="#1688c4" stroke="#171713" stroke-width="3"/>
+    <rect x="18" y="18" width="38" height="38" rx="8" fill="#fff8e8" stroke="#171713" stroke-width="3"/>
+    <path d="M40 28c5 0 9 4 9 9 0 7-5 12-12 12-6 0-11-4-11-10 0-4 2-8 6-9 2-2 5-2 8-2Z" fill="#ff7a1a" stroke="#171713" stroke-width="2.5"/>
+    <circle cx="35" cy="37" r="2" fill="#171713"/>
+    <circle cx="43" cy="36" r="2" fill="#171713"/>
+    <path d="M35 43c2 2 5 2 7 0" fill="none" stroke="#171713" stroke-linecap="round" stroke-width="2"/>
+    <path d="m48 14 2 4 4 2-4 2-2 4-2-4-4-2 4-2 2-4Z" fill="#d7ef32" stroke="#171713" stroke-linejoin="round" stroke-width="1.5"/>
+  </g>
+  <text x="76" y="40" fill="#171713" font-family="Helvetica" font-size="31" font-weight="bold" letter-spacing="-1.5">
+    <tspan>make</tspan><tspan fill="#f36d12">stopmotion</tspan><tspan fill="#171713">.com</tspan>
+  </text>
+</svg>

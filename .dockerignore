@@ -1,0 +1,14 @@
+.git
+.github
+.DS_Store
+.env
+.env.*
+coverage
+design
+dist
+node_modules
+*.log
+npm-debug.log*
+src/**/*.test.ts
+src/**/*.test.tsx
+src/test

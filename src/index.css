@@ -1,0 +1,79 @@
+:root {
+  font-family: "Inter Variable", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: #171713;
+  background: #f6edd9;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+  --canvas: #f6edd9;
+  --background: #fff8e8;
+  --foreground: #171713;
+  --muted: #55534b;
+  --subtle: #706e65;
+  --soft-border: #aaa497;
+  --panel-tint: #fff1d1;
+  --tracking: #d7ef32;
+  --accent: #ff7a1a;
+  --blue: #1688c4;
+  --coral: #ff6747;
+  --danger: #171713;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  color: var(--foreground);
+  background: var(--canvas);
+}
+
+button,
+input,
+select {
+  font: inherit;
+  border-radius: 0;
+}
+
+button,
+select,
+input[type="range"] {
+  accent-color: var(--foreground);
+}
+
+button {
+  color: inherit;
+}
+
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 3px;
+}
+
+button:disabled,
+select:disabled,
+input:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+a {
+  color: inherit;
+}
+
+::selection {
+  color: var(--background);
+  background: var(--foreground);
+}
