@@ -82,23 +82,10 @@ main,
   background: var(--tracking);
 }
 
-.local-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 7px 10px;
-  color: var(--foreground);
-  background: var(--background);
-  border: 1px solid var(--foreground);
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-}
-
 .project-nav {
   min-width: 0;
   display: flex;
-  align-items: stretch;
+  align-items: center;
   margin-inline: auto;
   padding-inline: 20px;
 }
@@ -106,6 +93,7 @@ main,
 .project-nav__select,
 .project-nav__button {
   height: 34px;
+  min-height: 34px;
   color: var(--foreground);
   background: var(--background);
   border: 1px solid var(--foreground);
@@ -122,6 +110,7 @@ main,
 
 .project-nav__actions {
   display: flex;
+  align-items: center;
   margin-left: -1px;
 }
 
@@ -1966,10 +1955,6 @@ select {
     width: 100%;
   }
 
-  .studio-section__toolbar .local-badge {
-    align-self: flex-start;
-  }
-
   .capture-workspace {
     grid-template-columns: 1fr;
   }
@@ -2039,11 +2024,6 @@ select {
   .privacy-section__copy,
   .data-control-card {
     padding: 28px 22px;
-  }
-
-  .local-badge {
-    padding: 7px;
-    font-size: 12px;
   }
 
   .project-nav__actions {

@@ -1506,10 +1506,6 @@ function App() {
                 onClear={() => void handleClearFrames()}
                 onDelete={() => void handleDeleteProject()}
               />
-              <div className="local-badge">
-                <LockKeyhole size={13} aria-hidden="true" />
-                On-device only
-              </div>
             </div>
           </header>
 
