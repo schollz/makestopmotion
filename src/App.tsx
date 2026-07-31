@@ -52,6 +52,7 @@ import {
   formatFrameFilename,
 } from './lib/media'
 import { loadMl5 } from './lib/ml5-loader'
+import { getSitePageUrl } from './lib/site-config'
 import type {
   CapturePhase,
   CaptureSettings,
@@ -262,7 +263,7 @@ function App() {
     const title = 'Stop Motion Studio | makestopmotion.com'
     const description =
       'Create stop motion privately in your browser with hands-free frame capture.'
-    const url = 'https://makestopmotion.com/studio'
+    const url = getSitePageUrl('/studio')
     document.title = title
     document
       .querySelector<HTMLMetaElement>('meta[name="description"]')

@@ -13,6 +13,22 @@ make serve
 Open the local URL shown by Vite in desktop Chrome or Edge. The command checks
 and installs npm dependencies before starting the app.
 
+## Environment
+
+`SITE_URL` sets the public HTTP(S) origin used by canonical links, Open Graph
+metadata, JSON-LD, `robots.txt`, and `sitemap.xml`. It defaults to
+`https://makestopmotion.com`.
+
+Set both `UMAMI_URL` and `UMAMI_WEBSITE_ID` to enable the Umami tracker on every
+page. `UMAMI_URL` is the Umami origin (for example,
+`https://umami.example.com`); if either value is missing, no tracker is loaded.
+See `.env.example` for the complete configuration.
+
+The Docker image applies these values when the container starts, so the same
+image can be reused across deployments without rebuilding it. Vite also reads
+the variables from the shell or a local `.env` file during development and
+standalone builds.
+
 ## How capture works
 
 1. Start the camera and allow access.

@@ -12,6 +12,7 @@ import {
 import { useEffect } from 'react'
 import './App.css'
 import { SiteFooter, SiteHeader } from './components/SiteChrome'
+import { getSitePageUrl } from './lib/site-config'
 
 export type MarketingRoute = 'home' | 'privacy' | 'terms' | 'contact'
 
@@ -48,7 +49,7 @@ const PAGE_META: Record<
 function usePageMetadata(route: MarketingRoute) {
   useEffect(() => {
     const meta = PAGE_META[route]
-    const url = `https://makestopmotion.com${meta.path}`
+    const url = getSitePageUrl(meta.path)
     document.title = meta.title
 
     const updateMeta = (selector: string, value: string) => {
@@ -346,6 +347,17 @@ function PrivacyPage() {
             files may be requested from jsDelivr and the model hosts used by
             TensorFlow.js; your camera feed is still not sent with those
             requests.
+          </p>
+        </section>
+
+        <section>
+          <h2>Optional site analytics</h2>
+          <p>
+            The site may use Umami to understand aggregate page visits and
+            improve the service. When enabled, the browser sends ordinary
+            pageview and request information to the configured Umami service.
+            Camera frames, captured photos, project names, and exported movies
+            are never included in analytics.
           </p>
         </section>
 
