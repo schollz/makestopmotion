@@ -51,6 +51,7 @@ import {
   downloadBlob,
   formatFrameFilename,
 } from './lib/media'
+import { playCaptureSound, prepareCaptureSound } from './lib/capture-sound'
 import { loadMl5 } from './lib/ml5-loader'
 import { getSitePageUrl } from './lib/site-config'
 import type {
@@ -346,6 +347,7 @@ function App() {
       nextSequenceRef.current += 1
       setFrames((current) => [...current, frame])
       setShutterVisible(true)
+      playCaptureSound()
       window.setTimeout(() => setShutterVisible(false), 180)
       navigator.storage?.persist?.().catch(() => undefined)
     } catch (error) {
@@ -698,6 +700,8 @@ function App() {
 
   const startCamera = useCallback(
     async (requestedDeviceId = settingsRef.current.selectedCameraId) => {
+      prepareCaptureSound()
+
       if (!navigator.mediaDevices?.getUserMedia) {
         setPhase('error')
         setErrorMessage(
