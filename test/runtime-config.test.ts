@@ -23,11 +23,13 @@ describe('runtime analytics configuration', () => {
     window.eval(runtimeConfigSource)
 
     expect(document.querySelector('script[data-makestopmotion-umami]')).toBeNull()
+    expect(window.__MAKESTOPMOTION_CONFIG__?.contactEmail).toBe('')
   })
 
   it('adds the configured Umami tracker once', () => {
     window.__MAKESTOPMOTION_CONFIG__ = {
       siteUrl: 'https://movies.example',
+      contactEmail: 'hello@example.com',
       umamiUrl: 'https://stats.example/',
       umamiWebsiteId: 'site-123',
     }
@@ -42,5 +44,6 @@ describe('runtime analytics configuration', () => {
     expect(trackers[0].src).toBe('https://stats.example/script.js')
     expect(trackers[0].dataset.websiteId).toBe('site-123')
     expect(trackers[0].defer).toBe(true)
+    expect(window.__MAKESTOPMOTION_CONFIG__?.contactEmail).toBe('hello@example.com')
   })
 })

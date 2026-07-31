@@ -19,6 +19,9 @@ and installs npm dependencies before starting the app.
 metadata, JSON-LD, `robots.txt`, and `sitemap.xml`. It defaults to
 `https://makestopmotion.com`.
 
+Set `CONTACT_EMAIL` to enable the contact page and use that address for its
+email links. When it is empty or unset, contact links and content are hidden.
+
 Set both `UMAMI_URL` and `UMAMI_WEBSITE_ID` to enable the Umami tracker on every
 page. `UMAMI_URL` is the Umami origin (for example,
 `https://umami.example.com`); if either value is missing, no tracker is loaded.

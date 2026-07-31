@@ -12,7 +12,7 @@ import {
 import { useEffect } from 'react'
 import './App.css'
 import { SiteFooter, SiteHeader } from './components/SiteChrome'
-import { getSitePageUrl } from './lib/site-config'
+import { getContactEmail, getSitePageUrl } from './lib/site-config'
 
 export type MarketingRoute = 'home' | 'privacy' | 'terms' | 'contact'
 
@@ -304,7 +304,7 @@ function PageIntro({
   )
 }
 
-function PrivacyPage() {
+function PrivacyPage({ contactEmail }: { contactEmail: string }) {
   return (
     <main id="top" className="content-page">
       <PageIntro eyebrow="Privacy policy" title="Your camera roll is yours.">
@@ -361,31 +361,35 @@ function PrivacyPage() {
           </p>
         </section>
 
-        <section>
-          <h2>Contact form</h2>
-          <p>
-            The contact page is the exception to the browser-only workflow. If
-            you submit it, the name, email address, and message you enter are
-            sent to the Subsnail form service so Zack can read and reply. Do
-            not include camera frames or other sensitive information in that
-            form.
-          </p>
-        </section>
+        {contactEmail ? (
+          <>
+            <section>
+              <h2>Contact form</h2>
+              <p>
+                The contact page is the exception to the browser-only workflow.
+                If you submit it, the name, email address, and message you enter
+                are sent to the Subsnail form service so the site operator can
+                read and reply. Do not include camera frames or other sensitive
+                information in that form.
+              </p>
+            </section>
 
-        <section>
-          <h2>Questions</h2>
-          <p>
-            Questions about this policy can be sent through the{' '}
-            <a href="/contact">contact page</a> or directly to{' '}
-            <a href="mailto:zack.scholl@gmail.com">zack.scholl@gmail.com</a>.
-          </p>
-        </section>
+            <section>
+              <h2>Questions</h2>
+              <p>
+                Questions about this policy can be sent through the{' '}
+                <a href="/contact">contact page</a> or directly to{' '}
+                <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
+              </p>
+            </section>
+          </>
+        ) : null}
       </article>
     </main>
   )
 }
 
-function TermsPage() {
+function TermsPage({ contactEmail }: { contactEmail: string }) {
   return (
     <main id="top" className="content-page">
       <PageIntro eyebrow="Terms of use" title="Make responsibly.">
@@ -453,11 +457,16 @@ function TermsPage() {
         </section>
 
         <section>
-          <h2>Changes and contact</h2>
+          <h2>{contactEmail ? 'Changes and contact' : 'Changes'}</h2>
           <p>
             The service and these terms may change over time. The current
-            version will be posted here with its revision date. Questions can
-            be sent through the <a href="/contact">contact page</a>.
+            version will be posted here with its revision date.
+            {contactEmail ? (
+              <>
+                {' '}Questions can be sent through the{' '}
+                <a href="/contact">contact page</a>.
+              </>
+            ) : null}
           </p>
         </section>
       </article>
@@ -465,7 +474,7 @@ function TermsPage() {
   )
 }
 
-function ContactPage() {
+function ContactPage({ contactEmail }: { contactEmail: string }) {
   useEffect(() => {
     const scriptUrl = 'https://subsnail.schollz.com/form/embed.js'
     if (document.querySelector(`script[src="${scriptUrl}"]`)) return
@@ -480,7 +489,7 @@ function ContactPage() {
     <main id="top" className="content-page">
       <PageIntro eyebrow="Contact" title="Say hello.">
         Found a bug, made something delightful, or have an idea for the
-        studio? Send Zack a note.
+        studio? Send a note.
       </PageIntro>
 
       <section className="contact-card" aria-labelledby="contact-form-title">
@@ -489,7 +498,7 @@ function ContactPage() {
           <h2 id="contact-form-title">Get in touch</h2>
           <p>
             Use the form or email{' '}
-            <a href="mailto:zack.scholl@gmail.com">zack.scholl@gmail.com</a>.
+            <a href={`mailto:${contactEmail}`}>{contactEmail}</a>.
           </p>
           <p className="contact-card__privacy">
             Form submissions are sent through Subsnail. Your camera projects
@@ -540,15 +549,17 @@ function ContactPage() {
 }
 
 export default function MarketingApp({ route }: { route: MarketingRoute }) {
-  usePageMetadata(route)
+  const contactEmail = getContactEmail()
+  const activeRoute = route === 'contact' && !contactEmail ? 'home' : route
+  usePageMetadata(activeRoute)
 
   return (
-    <div className={`app marketing-page marketing-page--${route}`}>
+    <div className={`app marketing-page marketing-page--${activeRoute}`}>
       <SiteHeader />
-      {route === 'privacy' ? <PrivacyPage /> : null}
-      {route === 'terms' ? <TermsPage /> : null}
-      {route === 'contact' ? <ContactPage /> : null}
-      {route === 'home' ? <LandingPage /> : null}
+      {activeRoute === 'privacy' ? <PrivacyPage contactEmail={contactEmail} /> : null}
+      {activeRoute === 'terms' ? <TermsPage contactEmail={contactEmail} /> : null}
+      {activeRoute === 'contact' ? <ContactPage contactEmail={contactEmail} /> : null}
+      {activeRoute === 'home' ? <LandingPage /> : null}
       <SiteFooter />
     </div>
   )

@@ -1,4 +1,5 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
+import { getContactEmail } from '../lib/site-config'
 
 const OTHER_TOOLS = [
   {
@@ -29,6 +30,7 @@ interface SiteHeaderProps {
 
 export function SiteHeader({ active }: SiteHeaderProps) {
   const isStudio = active === 'studio'
+  const contactEnabled = Boolean(getContactEmail())
 
   return (
     <header className="app-header">
@@ -43,7 +45,7 @@ export function SiteHeader({ active }: SiteHeaderProps) {
       <nav className="marketing-nav" aria-label="Primary navigation">
         <a href="/#how-it-works">How it works</a>
         <a href="/privacy">Privacy</a>
-        <a href="/contact">Contact</a>
+        {contactEnabled ? <a href="/contact">Contact</a> : null}
       </nav>
       <a className="header-cta" href={isStudio ? '/' : '/studio'}>
         {isStudio ? (
@@ -59,6 +61,8 @@ export function SiteHeader({ active }: SiteHeaderProps) {
 }
 
 export function SiteFooter() {
+  const contactEnabled = Boolean(getContactEmail())
+
   return (
     <footer className="site-footer">
       <div className="site-footer__links">
@@ -91,8 +95,12 @@ export function SiteFooter() {
         <a href="/privacy">privacy</a>
         <span aria-hidden="true">·</span>
         <a href="/terms">terms</a>
-        <span aria-hidden="true">·</span>
-        <a href="/contact">contact</a>
+        {contactEnabled ? (
+          <>
+            <span aria-hidden="true">·</span>
+            <a href="/contact">contact</a>
+          </>
+        ) : null}
       </div>
 
       <details className="tools-menu">

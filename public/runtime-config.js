@@ -1,5 +1,6 @@
 (function configureMakeStopMotion() {
   const defaults = {
+    contactEmail: '',
     siteUrl: 'https://makestopmotion.com',
     umamiUrl: '',
     umamiWebsiteId: '',

@@ -30,6 +30,7 @@ function siteEnvironmentPlugin(mode: string, command: 'build' | 'serve'): Plugin
   const loaded = loadEnv(mode, projectRoot, '')
   const environment = { ...loaded, ...process.env }
   const siteUrl = normalizeOrigin(environment.SITE_URL, 'SITE_URL', defaultSiteUrl)
+  const contactEmail = environment.CONTACT_EMAIL?.trim() ?? ''
   const configuredUmamiUrl = environment.UMAMI_URL?.trim() ?? ''
   const configuredUmamiWebsiteId = environment.UMAMI_WEBSITE_ID?.trim() ?? ''
   const analyticsEnabled = Boolean(configuredUmamiUrl && configuredUmamiWebsiteId)
@@ -41,13 +42,19 @@ function siteEnvironmentPlugin(mode: string, command: 'build' | 'serve'): Plugin
   if (umamiWebsiteId && !/^[A-Za-z0-9_-]+$/.test(umamiWebsiteId)) {
     throw new Error('UMAMI_WEBSITE_ID may only contain letters, numbers, underscores, and hyphens')
   }
+  if (contactEmail && !/^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+$/.test(contactEmail)) {
+    throw new Error('CONTACT_EMAIL must be a valid email address')
+  }
 
   const browserConfig = JSON.stringify({
+    contactEmail,
     siteUrl,
     umamiUrl,
     umamiWebsiteId,
   }).replaceAll('<', '\\u003c')
-  const hasBrowserOverride = Boolean(environment.SITE_URL?.trim() || analyticsEnabled)
+  const hasBrowserOverride = Boolean(
+    contactEmail || environment.SITE_URL?.trim() || analyticsEnabled,
+  )
 
   return {
     name: 'makestopmotion-site-environment',

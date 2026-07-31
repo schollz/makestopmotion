@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SITE_URL, getSitePageUrl, getSiteUrl } from './site-config'
+import {
+  DEFAULT_SITE_URL,
+  getContactEmail,
+  getSitePageUrl,
+  getSiteUrl,
+} from './site-config'
 
 afterEach(() => {
   delete window.__MAKESTOPMOTION_CONFIG__
@@ -22,5 +27,15 @@ describe('site configuration', () => {
   it('ignores an invalid or unsafe site URL', () => {
     window.__MAKESTOPMOTION_CONFIG__ = { siteUrl: 'javascript:alert(1)' }
     expect(getSiteUrl()).toBe(DEFAULT_SITE_URL)
+  })
+
+  it('only enables contact for a configured valid email address', () => {
+    expect(getContactEmail()).toBe('')
+
+    window.__MAKESTOPMOTION_CONFIG__ = { contactEmail: ' hello@example.com ' }
+    expect(getContactEmail()).toBe('hello@example.com')
+
+    window.__MAKESTOPMOTION_CONFIG__ = { contactEmail: 'not-an-email' }
+    expect(getContactEmail()).toBe('')
   })
 })
