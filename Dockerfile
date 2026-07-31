@@ -16,6 +16,13 @@ COPY --chmod=755 configure-runtime.sh /usr/local/bin/configure-runtime.sh
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --chown=101:101 --from=builder /app/dist /usr/share/nginx/html
 
+# COPY --chown owns the files, but the destination directory comes from the
+# base image and remains root-owned. The unprivileged entrypoint needs to create
+# temporary files alongside the static assets before atomically replacing them.
+USER root
+RUN chown 101:101 /usr/share/nginx/html
+USER 101
+
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
