@@ -2046,11 +2046,13 @@ select {
   }
 
   .site-footer {
-    min-height: 105px;
+    min-height: 0;
     align-items: flex-start;
     justify-content: center;
     flex-direction: column;
     gap: 8px;
+    padding-top: 24px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
   }
 
   .tools-menu ul {
