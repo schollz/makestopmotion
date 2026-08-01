@@ -1244,6 +1244,7 @@ select {
 }
 
 .site-footer a,
+.site-footer__privacy-button,
 .tools-menu summary {
   color: inherit;
   text-decoration: underline;
@@ -1253,10 +1254,21 @@ select {
 
 .site-footer a:hover,
 .site-footer a:focus-visible,
+.site-footer__privacy-button:hover,
+.site-footer__privacy-button:focus-visible,
 .tools-menu summary:hover,
 .tools-menu summary:focus-visible {
   color: var(--foreground);
   text-decoration-color: currentcolor;
+}
+
+.site-footer__privacy-button {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
 }
 
 .site-footer__links {
@@ -1322,6 +1334,69 @@ select {
 .tools-menu strong {
   color: var(--foreground);
   font-weight: 720;
+}
+
+.privacy-notice {
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  bottom: 16px;
+  width: min(980px, calc(100% - 32px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 24px;
+  padding: 18px 20px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--foreground);
+  box-shadow: 5px 5px 0 rgba(23, 23, 19, 0.16);
+  transform: translateX(-50%);
+}
+
+.privacy-notice h2 {
+  margin: 0 0 7px;
+  font-size: 18px;
+  font-weight: 740;
+  letter-spacing: -0.03em;
+}
+
+.privacy-notice p {
+  max-width: 700px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.privacy-notice a {
+  color: var(--foreground);
+  text-underline-offset: 2px;
+}
+
+.privacy-notice__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.privacy-notice__actions button {
+  min-height: 38px;
+  padding: 8px 12px;
+  color: var(--foreground);
+  background: var(--background);
+  border: 1px solid var(--foreground);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.privacy-notice__actions button:hover,
+.privacy-notice__actions button:focus-visible,
+.privacy-notice__actions button[aria-pressed="true"] {
+  color: var(--background);
+  background: var(--foreground);
 }
 
 .privacy-section__link {
@@ -1759,6 +1834,23 @@ select {
   main,
   .site-footer {
     width: min(100% - 24px, 680px);
+  }
+
+  .privacy-notice {
+    bottom: 12px;
+    width: calc(100% - 24px);
+    grid-template-columns: 1fr;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .privacy-notice__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .privacy-notice__actions button {
+    white-space: normal;
   }
 
   .app-header {

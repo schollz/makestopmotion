@@ -264,7 +264,7 @@ function PrivacyPage({ contactEmail }: { contactEmail: string }) {
       </PageIntro>
 
       <article className="policy-card" aria-label="Privacy policy">
-        <p className="policy-card__updated">Last updated July 31, 2026</p>
+        <p className="policy-card__updated">Last updated August 1, 2026</p>
 
         <section>
           <h2>Camera and project data</h2>
@@ -300,13 +300,18 @@ function PrivacyPage({ contactEmail }: { contactEmail: string }) {
         </section>
 
         <section>
-          <h2>Optional site analytics</h2>
+          <h2>Cookies, browser storage, and optional analytics</h2>
           <p>
-            The site may use Umami to understand aggregate page visits and
-            improve the service. When enabled, the browser sends ordinary
-            pageview and request information to the configured Umami service.
-            Camera frames, captured photos, project names, and exported movies
-            are never included in analytics.
+            This site does not set cookies or use advertising trackers. Browser
+            storage keeps your projects, settings, active project, and privacy
+            choice on your device. Analytics stays off unless you choose
+            “Allow anonymous analytics.” If Umami is configured and you allow
+            it, the browser sends the page address, referrer, browser and device
+            type, and request information used to derive an approximate
+            country. The IP address is not stored by Umami. Camera frames,
+            captured photos, project names, and exported movies are never
+            included. You can change or withdraw your choice at any time with
+            “privacy choices” in the footer.
           </p>
         </section>
 

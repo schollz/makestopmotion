@@ -1,5 +1,6 @@
 import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { getContactEmail } from '../lib/site-config'
+import { OPEN_PRIVACY_CHOICES_EVENT } from '../lib/privacy-consent'
 
 const OTHER_TOOLS = [
   {
@@ -95,6 +96,16 @@ export function SiteFooter() {
         <a href="/privacy">privacy</a>
         <span aria-hidden="true">·</span>
         <a href="/terms">terms</a>
+        <span aria-hidden="true">·</span>
+        <button
+          className="site-footer__privacy-button"
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(new Event(OPEN_PRIVACY_CHOICES_EVENT))
+          }
+        >
+          privacy choices
+        </button>
         {contactEnabled ? (
           <>
             <span aria-hidden="true">·</span>

@@ -22,10 +22,11 @@ metadata, JSON-LD, `robots.txt`, and `sitemap.xml`. It defaults to
 Set `CONTACT_EMAIL` to enable the contact page and use that address for its
 email links. When it is empty or unset, contact links and content are hidden.
 
-Set both `UMAMI_URL` and `UMAMI_WEBSITE_ID` to enable the Umami tracker on every
-page. `UMAMI_URL` is the Umami origin (for example,
-`https://umami.example.com`); if either value is missing, no tracker is loaded.
-See `.env.example` for the complete configuration.
+Set both `UMAMI_URL` and `UMAMI_WEBSITE_ID` to make optional Umami analytics
+available. The tracker remains blocked until a visitor explicitly allows
+anonymous analytics in the privacy notice. `UMAMI_URL` is the Umami origin (for
+example, `https://umami.example.com`); if either value is missing, no tracker is
+loaded. See `.env.example` for the complete configuration.
 
 The Docker image applies these values when the container starts, so the same
 image can be reused across deployments without rebuilding it. Vite also reads

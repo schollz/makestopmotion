@@ -10,6 +10,8 @@ const runtimeConfigSource = await readFile(
 describe('runtime analytics configuration', () => {
   beforeEach(() => {
     delete window.__MAKESTOPMOTION_CONFIG__
+    delete window.__MAKESTOPMOTION_LOAD_ANALYTICS__
+    localStorage.clear()
     document.head.querySelectorAll('script[data-makestopmotion-umami]').forEach((script) => {
       script.remove()
     })
@@ -17,6 +19,7 @@ describe('runtime analytics configuration', () => {
 
   afterEach(() => {
     delete window.__MAKESTOPMOTION_CONFIG__
+    delete window.__MAKESTOPMOTION_LOAD_ANALYTICS__
   })
 
   it('does not add a tracker without both Umami values', () => {
@@ -26,13 +29,28 @@ describe('runtime analytics configuration', () => {
     expect(window.__MAKESTOPMOTION_CONFIG__?.contactEmail).toBe('')
   })
 
-  it('adds the configured Umami tracker once', () => {
+  it('keeps configured analytics off before the visitor chooses', () => {
     window.__MAKESTOPMOTION_CONFIG__ = {
       siteUrl: 'https://movies.example',
       contactEmail: 'hello@example.com',
       umamiUrl: 'https://stats.example/',
       umamiWebsiteId: 'site-123',
     }
+
+    window.eval(runtimeConfigSource)
+
+    expect(document.querySelector('script[data-makestopmotion-umami]')).toBeNull()
+    expect(window.__MAKESTOPMOTION_LOAD_ANALYTICS__).toBeTypeOf('function')
+  })
+
+  it('adds the configured Umami tracker once after analytics is allowed', () => {
+    window.__MAKESTOPMOTION_CONFIG__ = {
+      siteUrl: 'https://movies.example',
+      contactEmail: 'hello@example.com',
+      umamiUrl: 'https://stats.example/',
+      umamiWebsiteId: 'site-123',
+    }
+    localStorage.setItem('makestopmotion-privacy-choice-v1', 'analytics')
 
     window.eval(runtimeConfigSource)
     window.eval(runtimeConfigSource)
@@ -45,5 +63,19 @@ describe('runtime analytics configuration', () => {
     expect(trackers[0].dataset.websiteId).toBe('site-123')
     expect(trackers[0].defer).toBe(true)
     expect(window.__MAKESTOPMOTION_CONFIG__?.contactEmail).toBe('hello@example.com')
+  })
+
+  it('can load analytics immediately after an affirmative choice', () => {
+    window.__MAKESTOPMOTION_CONFIG__ = {
+      umamiUrl: 'https://stats.example',
+      umamiWebsiteId: 'site-123',
+    }
+
+    window.eval(runtimeConfigSource)
+    window.__MAKESTOPMOTION_LOAD_ANALYTICS__?.()
+
+    expect(
+      document.querySelectorAll('script[data-makestopmotion-umami]'),
+    ).toHaveLength(1)
   })
 })
