@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import { clearFrames } from './lib/frame-db'
@@ -7,17 +8,6 @@ import type {
   WorkerIncomingMessage,
   WorkerOutgoingMessage,
 } from './types'
-
-vi.mock('handtrackjs', () => ({
-  ObjectDetection: class {
-    modelPath = 'model.json '
-    async load() {}
-    async detect() {
-      return []
-    }
-    dispose() {}
-  },
-}))
 
 vi.mock('./lib/ml5-loader', () => ({
   loadMl5: vi.fn().mockResolvedValue({
@@ -90,7 +80,7 @@ describe('App camera safeguards', () => {
     expect(getUserMedia).toHaveBeenCalledOnce()
   })
 
-  it('persists the hands-free capture preference', async () => {
+  it('persists the automatic capture stop preference', async () => {
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -101,19 +91,21 @@ describe('App camera safeguards', () => {
 
     const user = userEvent.setup()
     render(<App />)
-    const toggle = screen.getByRole('checkbox', {
-      name: 'Enable hands-free capture',
-    })
+    const ready = screen.getByRole('button', { name: 'Ready' })
+    const stop = screen.getByRole('button', { name: 'Stop' })
 
-    expect(toggle).toBeChecked()
-    await user.click(toggle)
-    expect(toggle).not.toBeChecked()
+    expect(ready).toHaveAttribute('aria-pressed', 'true')
+    await user.click(stop)
+    expect(stop).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByText('Automatic capture is stopped. Take frame still works.'),
+    ).toBeInTheDocument()
     expect(localStorage.getItem('stillframe-settings-v1')).toContain(
       '"autoCaptureEnabled":false',
     )
   })
 
-  it('lets the user switch to Handtrack.js and remembers the choice', async () => {
+  it('loads both fast hand detectors without exposing detector controls', async () => {
     Object.defineProperty(navigator, 'mediaDevices', {
       configurable: true,
       value: {
@@ -122,36 +114,22 @@ describe('App camera safeguards', () => {
       },
     })
 
-    const user = userEvent.setup()
-    render(<App />)
-    const detector = screen.getByRole('combobox', { name: /Hand detector/i })
-
-    await user.selectOptions(detector, 'handtrack')
-
-    expect(detector).toHaveValue('handtrack')
-    expect(localStorage.getItem('stillframe-settings-v1')).toContain(
-      '"handDetector":"handtrack"',
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
     )
-  })
+    expect(
+      screen.queryByRole('combobox', { name: /Hand detector/i }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByLabelText('Active hand detectors'),
+    ).not.toBeInTheDocument()
 
-  it('lets the user switch to ml5 HandPose and remembers the choice', async () => {
-    Object.defineProperty(navigator, 'mediaDevices', {
-      configurable: true,
-      value: {
-        getUserMedia: vi.fn(),
-        enumerateDevices: vi.fn().mockResolvedValue([]),
-      },
-    })
-
-    const user = userEvent.setup()
-    render(<App />)
-    const detector = screen.getByRole('combobox', { name: /Hand detector/i })
-
-    await user.selectOptions(detector, 'ml5')
-
-    expect(detector).toHaveValue('ml5')
-    expect(localStorage.getItem('stillframe-settings-v1')).toContain(
-      '"handDetector":"ml5"',
+    await waitFor(() =>
+      expect(
+        screen.getAllByRole('button', { name: 'Start camera' })[0],
+      ).toBeEnabled(),
     )
   })
 })

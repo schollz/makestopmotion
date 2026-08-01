@@ -79,6 +79,18 @@ describe('capture sound', () => {
     ).toBe(true)
   })
 
+  it('plays one quiet ding for the hand-clear cue', async () => {
+    const { AudioContextMock, sources } = createAudioContextMock()
+    vi.stubGlobal('AudioContext', AudioContextMock)
+
+    const { playHandClearSound } = await import('./capture-sound')
+    playHandClearSound()
+
+    expect(sources).toHaveLength(1)
+    expect(sources[0]?.start).toHaveBeenCalledOnce()
+    expect(sources[0]?.stop).toHaveBeenCalledOnce()
+  })
+
   it('unlocks a suspended audio context while starting the camera', async () => {
     const { AudioContextMock, resume } = createAudioContextMock('suspended')
     vi.stubGlobal('AudioContext', AudioContextMock)

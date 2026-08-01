@@ -25,14 +25,11 @@ export interface ProjectRecord {
   createdAt: number
 }
 
-export type HandDetector = 'mediapipe' | 'handtrack' | 'ml5'
-
 export interface CaptureSettings {
   clearDelayMs: number
   playbackFps: number
   selectedCameraId: string
   autoCaptureEnabled: boolean
-  handDetector: HandDetector
 }
 
 export interface HandLandmark {
@@ -47,10 +44,11 @@ export interface HandDetectionResult {
   landmarks: HandLandmark[][]
 }
 
-export interface HandDetectionBox {
-  bbox: [number, number, number, number]
-  label: string
-  score: number
+export interface DetectorProgressMessage {
+  type: 'progress'
+  stage: string
+  elapsedMs: number
+  details?: Record<string, string | number | boolean>
 }
 
 export type WorkerIncomingMessage =
@@ -71,5 +69,6 @@ export type WorkerIncomingMessage =
 
 export type WorkerOutgoingMessage =
   | { type: 'ready' }
+  | DetectorProgressMessage
   | ({ type: 'result' } & HandDetectionResult)
   | { type: 'error'; message: string }

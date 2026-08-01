@@ -115,8 +115,8 @@ function LandingPage() {
           <h2 id="how-it-works-title">Your hand is the shutter.</h2>
           <p>
             No remote, timer routine, or repeated camera tapping. The
-            on-device hand detector knows when you are working and when the set
-            is clear.
+            on-device hand detectors know when you are working and when the set
+            is clear. A detection from any one of them pauses capture.
           </p>
         </header>
 
@@ -210,7 +210,7 @@ function LandingPage() {
               <ShieldCheck size={19} aria-hidden="true" />
               <span>
                 <strong>Detection stays on-device.</strong> Your live camera
-                feed is processed by a model running inside this browser.
+                feed is processed by two models running inside this browser.
               </span>
             </li>
             <li>
@@ -342,11 +342,10 @@ function PrivacyPage({ contactEmail }: { contactEmail: string }) {
             Your browser must request the website files needed to run the app.
             As with any website, the hosting provider may receive ordinary
             request information such as an IP address, browser details, and a
-            timestamp. The default MediaPipe model runs locally after its files
-            load. If you select Handtrack.js or ml5 HandPose, library and model
-            files may be requested from jsDelivr and the model hosts used by
-            TensorFlow.js; your camera feed is still not sent with those
-            requests.
+            timestamp. MediaPipe and ml5 HandPose both run locally after their
+            files load. Library and model files may be requested from jsDelivr
+            and the model hosts used by TensorFlow.js; your camera feed is still
+            not sent with those requests.
           </p>
         </section>
 

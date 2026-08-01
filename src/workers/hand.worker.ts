@@ -12,9 +12,21 @@ import type {
 } from '../types'
 
 let handLandmarker: HandLandmarker | null = null
+let initializationStartedAt = 0
+
+const LOG_PREFIX = '[hand-detection][mediapipe-worker]'
 
 function send(message: WorkerOutgoingMessage) {
   self.postMessage(message)
+}
+
+function reportProgress(
+  stage: string,
+  details?: Record<string, string | number | boolean>,
+) {
+  const elapsedMs = Math.round(performance.now() - initializationStartedAt)
+  console.info(`${LOG_PREFIX} ${stage}`, { elapsedMs, ...details })
+  send({ type: 'progress', stage, elapsedMs, details })
 }
 
 function serializeLandmarks(
@@ -30,7 +42,14 @@ self.onmessage = async (event: MessageEvent<WorkerIncomingMessage>) => {
 
   try {
     if (message.type === 'init') {
+      initializationStartedAt = performance.now()
+      reportProgress('initialization started', {
+        wasmPath: message.wasmPath,
+        modelPath: message.modelPath,
+      })
       const fileset = await resolveVisionFileset(message.wasmPath)
+      reportProgress('WASM fileset resolved')
+      reportProgress('loading hand landmark model')
       handLandmarker = await HandLandmarker.createFromOptions(fileset, {
         baseOptions: {
           modelAssetPath: message.modelPath,
@@ -41,6 +60,7 @@ self.onmessage = async (event: MessageEvent<WorkerIncomingMessage>) => {
         minHandPresenceConfidence: 0.6,
         minTrackingConfidence: 0.6,
       })
+      reportProgress('model ready')
       send({ type: 'ready' })
       return
     }
@@ -71,10 +91,12 @@ self.onmessage = async (event: MessageEvent<WorkerIncomingMessage>) => {
     if (message.type === 'detect') {
       message.bitmap.close()
     }
+    const messageText =
+      error instanceof Error ? error.message : 'The hand detector failed.'
+    console.error(`${LOG_PREFIX} failed`, error)
     send({
       type: 'error',
-      message:
-        error instanceof Error ? error.message : 'The hand detector failed.',
+      message: messageText,
     })
   }
 }

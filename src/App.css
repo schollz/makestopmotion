@@ -843,24 +843,16 @@ main {
   border-bottom: 1px solid var(--foreground);
 }
 
-.control-panel__heading,
 .section-header__title {
   display: flex;
   align-items: center;
   gap: 12px;
 }
 
-.control-panel__heading {
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--foreground);
-}
-
-.control-panel__heading .eyebrow,
 .section-header .eyebrow {
   margin-bottom: 3px;
 }
 
-.control-panel h2,
 .section-header h2 {
   margin: 0;
   color: var(--foreground);
@@ -886,7 +878,6 @@ main {
   border-bottom: 1px solid var(--soft-border);
 }
 
-.control-block--switch,
 .control-label {
   display: flex;
   align-items: center;
@@ -913,44 +904,57 @@ main {
   line-height: 1.45;
 }
 
-.switch {
-  position: relative;
-  width: 42px;
-  height: 24px;
-  flex: 0 0 auto;
-  cursor: pointer;
+.control-block--capture-mode {
+  padding-top: 0;
 }
 
-.switch input {
-  position: absolute;
-  opacity: 0;
-}
-
-.switch > span:not(.sr-only) {
-  position: absolute;
-  inset: 0;
-  background: var(--background);
+.capture-mode-toggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  padding: 3px;
+  background: var(--panel-tint);
   border: 1px solid var(--foreground);
 }
 
-.switch > span:not(.sr-only)::after {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
+.capture-mode-toggle__option {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.capture-mode-toggle__option.is-active:first-child {
+  color: var(--foreground);
+  background: var(--tracking);
+}
+
+.capture-mode-toggle__option.is-active:last-child {
+  color: var(--background);
   background: var(--foreground);
-  transition: transform 140ms ease;
 }
 
-.switch input:checked + span::after {
-  transform: translateX(18px);
+.capture-mode-toggle__dot {
+  width: 8px;
+  height: 8px;
+  display: block;
+  color: inherit;
+  background: currentColor;
+  border-radius: 50%;
 }
 
-.switch input:focus-visible + span {
-  outline: 2px solid var(--foreground);
-  outline-offset: 2px;
+.capture-mode-help {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .control-label output {

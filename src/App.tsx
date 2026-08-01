@@ -51,20 +51,25 @@ import {
   downloadBlob,
   formatFrameFilename,
 } from './lib/media'
-import { playCaptureSound, prepareCaptureSound } from './lib/capture-sound'
+import {
+  playCaptureSound,
+  playHandClearSound,
+  prepareCaptureSound,
+} from './lib/capture-sound'
+import {
+  anyHandDetectorVotedYes,
+  didDetectedHandClear,
+} from './lib/hand-detection'
 import { loadMl5 } from './lib/ml5-loader'
 import { getSitePageUrl } from './lib/site-config'
 import type {
   CapturePhase,
   CaptureSettings,
   FrameRecord,
-  HandDetectionBox,
-  HandDetector,
   HandLandmark,
   ProjectRecord,
   WorkerOutgoingMessage,
 } from './types'
-import type { HandTrackModel, HandTrackPrediction } from 'handtrackjs'
 import type {
   Ml5HandPoseModel,
   Ml5HandPrediction,
@@ -74,15 +79,13 @@ const SETTINGS_KEY = 'stillframe-settings-v1'
 const ACTIVE_PROJECT_KEY = 'stillframe-active-project-v1'
 const DETECTION_INTERVAL_MS = 1000 / 15
 const DETECTOR_STALE_MS = 1_200
-const HANDTRACK_MODEL_BASE =
-  'https://cdn.jsdelivr.net/npm/handtrackjs@0.1.5/models/webmodel/'
+const VISION_LOG_PREFIX = '[hand-detection][coordinator]'
 
 const DEFAULT_SETTINGS: CaptureSettings = {
   clearDelayMs: 500,
   playbackFps: 8,
   selectedCameraId: '',
   autoCaptureEnabled: true,
-  handDetector: 'mediapipe',
 }
 
 const HAND_CONNECTIONS: [number, number][] = [
@@ -115,12 +118,6 @@ function loadSettings(): CaptureSettings {
     if (!stored) return DEFAULT_SETTINGS
     const parsed = JSON.parse(stored) as Partial<CaptureSettings>
     return {
-      ...DEFAULT_SETTINGS,
-      ...parsed,
-      handDetector:
-        parsed.handDetector === 'handtrack' || parsed.handDetector === 'ml5'
-          ? parsed.handDetector
-          : 'mediapipe',
       clearDelayMs:
         typeof parsed.clearDelayMs === 'number'
           ? Math.min(5_000, Math.max(100, parsed.clearDelayMs))
@@ -129,6 +126,14 @@ function loadSettings(): CaptureSettings {
         typeof parsed.playbackFps === 'number'
           ? Math.min(24, Math.max(1, parsed.playbackFps))
           : DEFAULT_SETTINGS.playbackFps,
+      selectedCameraId:
+        typeof parsed.selectedCameraId === 'string'
+          ? parsed.selectedCameraId
+          : DEFAULT_SETTINGS.selectedCameraId,
+      autoCaptureEnabled:
+        typeof parsed.autoCaptureEnabled === 'boolean'
+          ? parsed.autoCaptureEnabled
+          : DEFAULT_SETTINGS.autoCaptureEnabled,
     }
   } catch {
     return DEFAULT_SETTINGS
@@ -142,8 +147,8 @@ function describePhase(
 ) {
   if (!autoCaptureEnabled && phase !== 'camera-off') {
     return {
-      label: 'Manual mode',
-      detail: 'Auto capture is paused',
+      label: 'Capture stopped',
+      detail: 'Use Take frame for manual photos',
       tone: 'neutral',
     }
   }
@@ -152,7 +157,7 @@ function describePhase(
     case 'loading-detector':
       return {
         label: 'Preparing vision',
-        detail: 'Loading the on-device hand model',
+        detail: 'Loading both on-device hand models',
         tone: 'neutral',
       }
     case 'waiting-for-hand':
@@ -208,23 +213,36 @@ function cleanProjectName(name: string) {
   return name.trim().slice(0, 60)
 }
 
+interface PendingMediaPipeDetection {
+  generation: number
+  cycleId: number
+  startedAt: number
+  resolve: (landmarks: HandLandmark[][]) => void
+  reject: (error: Error) => void
+}
+
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const overlayRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const workerRef = useRef<Worker | null>(null)
-  const handTrackModelRef = useRef<HandTrackModel | null>(null)
-  const handTrackLoadRef = useRef<Promise<HandTrackModel> | null>(null)
   const ml5ModelRef = useRef<Ml5HandPoseModel | null>(null)
   const ml5LoadRef = useRef<Promise<Ml5HandPoseModel> | null>(null)
+  const modelCleanupTimerRef = useRef<number | null>(null)
   const animationFrameRef = useRef<number | null>(null)
   const machineRef = useRef(createCaptureMachineState())
   const inferenceInFlightRef = useRef(false)
+  const pendingMediaPipeDetectionRef =
+    useRef<PendingMediaPipeDetection | null>(null)
+  const readinessLogKeyRef = useRef('')
+  const detectionCycleRef = useRef(0)
+  const lastDetectorVoteKeyRef = useRef('')
+  const didLogVisionStartupRef = useRef(false)
   const lastInferenceSentAtRef = useRef(0)
   const lastDetectorResultAtRef = useRef(0)
+  const handWasDetectedRef = useRef(false)
   const detectorReadyRef = useRef(false)
   const mediaPipeReadyRef = useRef(false)
-  const handTrackReadyRef = useRef(false)
   const ml5ReadyRef = useRef(false)
   const detectorGenerationRef = useRef(0)
   const cameraActiveRef = useRef(false)
@@ -241,24 +259,27 @@ function App() {
   const [frames, setFrames] = useState<FrameRecord[]>([])
   const [framesLoading, setFramesLoading] = useState(true)
   const [mediaPipeReady, setMediaPipeReady] = useState(false)
-  const [handTrackReady, setHandTrackReady] = useState(false)
   const [ml5Ready, setMl5Ready] = useState(false)
   const [cameraActive, setCameraActive] = useState(false)
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
   const [phase, setPhase] = useState<CapturePhase>('loading-detector')
   const [remainingMs, setRemainingMs] = useState(settings.clearDelayMs)
   const [landmarks, setLandmarks] = useState<HandLandmark[][]>([])
-  const [handBoxes, setHandBoxes] = useState<HandDetectionBox[]>([])
   const [errorMessage, setErrorMessage] = useState('')
   const [showPreview, setShowPreview] = useState(false)
   const [shutterVisible, setShutterVisible] = useState(false)
   const [deletedFrame, setDeletedFrame] = useState<FrameRecord | null>(null)
-  const detectorReady =
-    settings.handDetector === 'mediapipe'
-      ? mediaPipeReady
-      : settings.handDetector === 'handtrack'
-        ? handTrackReady
-        : ml5Ready
+  const detectorReady = mediaPipeReady && ml5Ready
+
+  useEffect(() => {
+    if (didLogVisionStartupRef.current) return
+    didLogVisionStartupRef.current = true
+    console.info(`${VISION_LOG_PREFIX} starting both detector initializers`, {
+      detectors: ['MediaPipe', 'ml5 HandPose'],
+      combinationRule: 'OR — any positive vote detects a hand',
+      developmentEffectReplayExpected: import.meta.env.DEV,
+    })
+  }, [])
 
   useEffect(() => {
     const title = 'Stop Motion Studio | makestopmotion.com'
@@ -298,6 +319,51 @@ function App() {
     },
     [],
   )
+
+  const refreshCombinedDetectorReadiness = useCallback(() => {
+    const readiness = {
+      mediapipe: mediaPipeReadyRef.current,
+      ml5: ml5ReadyRef.current,
+    }
+    const ready = readiness.mediapipe && readiness.ml5
+    detectorReadyRef.current = ready
+
+    const readinessKey = JSON.stringify(readiness)
+    if (readinessLogKeyRef.current !== readinessKey) {
+      readinessLogKeyRef.current = readinessKey
+      console.info(`${VISION_LOG_PREFIX} readiness changed`, {
+        ...readiness,
+        allReady: ready,
+      })
+    }
+
+    if (ready) {
+      console.info(`${VISION_LOG_PREFIX} both models are ready`)
+      setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
+    }
+
+    return ready
+  }, [])
+
+  const failCombinedDetection = useCallback((message: string) => {
+    console.error(`${VISION_LOG_PREFIX} detector failure`, {
+      message,
+      readinessBeforeFailure: {
+        mediapipe: mediaPipeReadyRef.current,
+        ml5: ml5ReadyRef.current,
+      },
+    })
+    mediaPipeReadyRef.current = false
+    ml5ReadyRef.current = false
+    detectorReadyRef.current = false
+    handWasDetectedRef.current = false
+    setMediaPipeReady(false)
+    setMl5Ready(false)
+    readinessLogKeyRef.current = ''
+    machineRef.current = resetCaptureMachine()
+    setPhase('error')
+    setErrorMessage(message)
+  }, [])
 
   const selectActiveProject = useCallback((projectId: string) => {
     if (!projectId) return
@@ -370,6 +436,10 @@ function App() {
 
       const now = performance.now()
       lastDetectorResultAtRef.current = now
+      if (didDetectedHandClear(handWasDetectedRef.current, hasHand)) {
+        playHandClearSound()
+      }
+      handWasDetectedRef.current = hasHand
       if (captureBusyRef.current) return
 
       const output = updateCaptureMachine(machineRef.current, {
@@ -456,61 +526,72 @@ function App() {
   }, [activeProjectId, projectsReady])
 
   useEffect(() => {
+    const workerStartedAt = performance.now()
+    console.info(`${VISION_LOG_PREFIX} launching MediaPipe worker`)
     const worker = new Worker(
       new URL('./workers/hand.worker.ts', import.meta.url),
-      { type: 'module' },
+      { type: 'module', name: 'mediapipe-hand-detector' },
     )
     workerRef.current = worker
 
     worker.onmessage = (event: MessageEvent<WorkerOutgoingMessage>) => {
       const message = event.data
 
+      if (message.type === 'progress') {
+        console.info(`${VISION_LOG_PREFIX} MediaPipe: ${message.stage}`, {
+          elapsedMs: message.elapsedMs,
+          ...message.details,
+        })
+        return
+      }
+
       if (message.type === 'ready') {
+        console.info(`${VISION_LOG_PREFIX} MediaPipe ready`, {
+          elapsedMs: Math.round(performance.now() - workerStartedAt),
+        })
         mediaPipeReadyRef.current = true
         setMediaPipeReady(true)
-        if (settingsRef.current.handDetector === 'mediapipe') {
-          detectorReadyRef.current = true
-          setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
-        }
+        refreshCombinedDetectorReadiness()
         return
       }
 
       if (message.type === 'error') {
-        inferenceInFlightRef.current = false
-        mediaPipeReadyRef.current = false
-        setMediaPipeReady(false)
-        if (settingsRef.current.handDetector === 'mediapipe') {
-          detectorReadyRef.current = false
-          setPhase('error')
-          setErrorMessage(
-            `MediaPipe detection stopped: ${message.message} Try Handtrack.js or refresh the page.`,
-          )
-        }
+        pendingMediaPipeDetectionRef.current?.reject(new Error(message.message))
+        pendingMediaPipeDetectionRef.current = null
+        failCombinedDetection(
+          `MediaPipe detection stopped: ${message.message} Refresh the page to restart both detectors.`,
+        )
         return
       }
 
-      inferenceInFlightRef.current = false
-      if (
-        settingsRef.current.handDetector !== 'mediapipe' ||
-        message.generation !== detectorGenerationRef.current
-      ) {
-        return
+      const pendingDetection = pendingMediaPipeDetectionRef.current
+      if (pendingDetection?.generation === message.generation) {
+        pendingMediaPipeDetectionRef.current = null
+        console.debug(`${VISION_LOG_PREFIX} MediaPipe inference returned`, {
+          cycleId: pendingDetection.cycleId,
+          elapsedMs: Math.round(
+            performance.now() - pendingDetection.startedAt,
+          ),
+          hands: message.landmarks.length,
+        })
+        pendingDetection.resolve(message.landmarks)
       }
-      setLandmarks(message.landmarks)
-      setHandBoxes([])
-      applyHandPresence(message.landmarks.length > 0)
     }
 
-    worker.onerror = () => {
-      mediaPipeReadyRef.current = false
-      setMediaPipeReady(false)
-      if (settingsRef.current.handDetector === 'mediapipe') {
-        detectorReadyRef.current = false
-        setPhase('error')
-        setErrorMessage(
-          'MediaPipe could not start. Try Handtrack.js or refresh the page.',
-        )
-      }
+    worker.onerror = (event) => {
+      console.error(`${VISION_LOG_PREFIX} MediaPipe worker error event`, {
+        message: event.message,
+        filename: event.filename,
+        line: event.lineno,
+        column: event.colno,
+      })
+      pendingMediaPipeDetectionRef.current?.reject(
+        new Error('The MediaPipe worker stopped unexpectedly.'),
+      )
+      pendingMediaPipeDetectionRef.current = null
+      failCombinedDetection(
+        'MediaPipe could not start. Refresh the page to restart both detectors.',
+      )
     }
 
     worker.postMessage({
@@ -520,130 +601,76 @@ function App() {
     })
 
     return () => {
+      console.debug(`${VISION_LOG_PREFIX} stopping MediaPipe worker`, {
+        reason: 'React effect cleanup',
+        note: import.meta.env.DEV
+          ? 'One early stop/relaunch is expected from Strict Mode in development.'
+          : undefined,
+      })
       worker.postMessage({ type: 'close' })
       worker.terminate()
       workerRef.current = null
       detectorReadyRef.current = false
       mediaPipeReadyRef.current = false
     }
-  }, [applyHandPresence])
+  }, [failCombinedDetection, refreshCombinedDetectorReadiness])
 
   useEffect(() => {
-    if (settings.handDetector !== 'handtrack') return
-
-    detectorReadyRef.current = handTrackReadyRef.current
-    if (handTrackModelRef.current) {
-      handTrackReadyRef.current = true
-      detectorReadyRef.current = true
-      setHandTrackReady(true)
-      setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
-      return
-    }
-
-    setPhase('loading-detector')
-    let active = true
-    const loadModel = async () => {
-      if (!handTrackLoadRef.current) {
-        handTrackLoadRef.current = import('handtrackjs')
-          .then(async (handTrack) => {
-            const model = new handTrack.ObjectDetection({
-              basePath: HANDTRACK_MODEL_BASE,
-              bboxLineWidth: '2',
-              flipHorizontal: false,
-              fontSize: 17,
-              imageScaleFactor: 0.7,
-              iouThreshold: 0.3,
-              labelMap: {
-                1: 'open',
-                2: 'closed',
-                3: 'pinch',
-                4: 'point',
-                5: 'face',
-                6: 'pointtip',
-                7: 'pinchtip',
-              },
-              maxNumBoxes: 10,
-              modelSize: 'small',
-              modelType: 'ssd320fpnlite',
-              outputStride: 16,
-              renderThresholds: null,
-              scoreThreshold: 0.55,
-            })
-            // Handtrack.js 0.1.5 accidentally includes a trailing space.
-            model.modelPath = model.modelPath.trim()
-            await model.load()
-            return model
-          })
-          .then((model) => {
-            handTrackModelRef.current = model
-            return model
-          })
-          .finally(() => {
-            handTrackLoadRef.current = null
-          })
-      }
-      return handTrackLoadRef.current
-    }
-
-    void loadModel()
-      .then(() => {
-        if (!active) return
-        handTrackReadyRef.current = true
-        detectorReadyRef.current = true
-        setHandTrackReady(true)
-        setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
-      })
-      .catch((error) => {
-        if (!active) return
-        handTrackReadyRef.current = false
-        detectorReadyRef.current = false
-        setHandTrackReady(false)
-        setPhase('error')
-        setErrorMessage(
-          `Handtrack.js could not start: ${
-            error instanceof Error ? error.message : 'the model failed to load'
-          }. Try MediaPipe or reload the page.`,
-        )
-      })
-
-    return () => {
-      active = false
-    }
-  }, [settings.handDetector])
-
-  useEffect(() => {
-    if (settings.handDetector !== 'ml5') return
-
-    detectorReadyRef.current = ml5ReadyRef.current
+    const initializationStartedAt = performance.now()
     if (ml5ModelRef.current) {
+      console.info(`${VISION_LOG_PREFIX} ml5 HandPose reused existing model`)
       ml5ReadyRef.current = true
-      detectorReadyRef.current = true
       setMl5Ready(true)
-      setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
+      refreshCombinedDetectorReadiness()
       return
     }
 
     setPhase('loading-detector')
+    console.info(`${VISION_LOG_PREFIX} initializing ml5 HandPose`, {
+      runtime: 'tfjs',
+      modelType: 'full',
+    })
     let active = true
     const loadModel = async () => {
       if (!ml5LoadRef.current) {
+        console.info(`${VISION_LOG_PREFIX} requesting ml5 browser library`)
         ml5LoadRef.current = loadMl5()
           .then((ml5) => {
+            console.info(`${VISION_LOG_PREFIX} ml5 browser API ready`, {
+              elapsedMs: Math.round(
+                performance.now() - initializationStartedAt,
+              ),
+            })
+            console.info(`${VISION_LOG_PREFIX} loading ml5 HandPose model`)
             return new Promise<Ml5HandPoseModel>((resolve, reject) => {
               let model: Ml5HandPoseModel | undefined
               const timeout = window.setTimeout(() => {
                 model?.detectStop()
+                console.error(`${VISION_LOG_PREFIX} ml5 model load timed out`, {
+                  elapsedMs: Math.round(
+                    performance.now() - initializationStartedAt,
+                  ),
+                })
                 reject(new Error('The ml5 HandPose model timed out while loading.'))
               }, 45_000)
 
-              model = ml5.handPose({
-                maxHands: 2,
-                modelType: 'full',
-                runtime: 'tfjs',
-              }, () => {
-                window.clearTimeout(timeout)
-                if (model) resolve(model)
-              })
+              model = ml5.handPose(
+                {
+                  maxHands: 2,
+                  modelType: 'full',
+                  runtime: 'tfjs',
+                },
+                () => {
+                  window.clearTimeout(timeout)
+                  console.info(`${VISION_LOG_PREFIX} ml5 model callback fired`, {
+                    elapsedMs: Math.round(
+                      performance.now() - initializationStartedAt,
+                    ),
+                    modelAssigned: Boolean(model),
+                  })
+                  if (model) resolve(model)
+                },
+              )
             })
           })
           .then((model) => {
@@ -660,40 +687,38 @@ function App() {
     void loadModel()
       .then(() => {
         if (!active) return
+        console.info(`${VISION_LOG_PREFIX} ml5 HandPose ready`, {
+          elapsedMs: Math.round(performance.now() - initializationStartedAt),
+        })
         ml5ReadyRef.current = true
-        detectorReadyRef.current = true
         setMl5Ready(true)
-        setPhase(cameraActiveRef.current ? 'waiting-for-hand' : 'camera-off')
+        refreshCombinedDetectorReadiness()
       })
       .catch((error) => {
         if (!active) return
-        ml5ReadyRef.current = false
-        detectorReadyRef.current = false
-        setMl5Ready(false)
-        setPhase('error')
-        setErrorMessage(
+        failCombinedDetection(
           `ml5 HandPose could not start: ${
             error instanceof Error ? error.message : 'the model failed to load'
-          }. Try another detector or reload the page.`,
+          }. Refresh the page to restart both detectors.`,
         )
       })
 
     return () => {
       active = false
     }
-  }, [settings.handDetector])
+  }, [failCombinedDetection, refreshCombinedDetectorReadiness])
 
   const stopCamera = useCallback(() => {
     cameraActiveRef.current = false
     setCameraActive(false)
+    detectorGenerationRef.current += 1
     stopMediaStream(streamRef.current)
     streamRef.current = null
     if (videoRef.current) videoRef.current.srcObject = null
     machineRef.current = resetCaptureMachine()
-    inferenceInFlightRef.current = false
     lastDetectorResultAtRef.current = 0
+    handWasDetectedRef.current = false
     setLandmarks([])
-    setHandBoxes([])
     setRemainingMs(settingsRef.current.clearDelayMs)
     setPhase(detectorReadyRef.current ? 'camera-off' : 'loading-detector')
   }, [])
@@ -701,6 +726,7 @@ function App() {
   const startCamera = useCallback(
     async (requestedDeviceId = settingsRef.current.selectedCameraId) => {
       prepareCaptureSound()
+      detectorGenerationRef.current += 1
 
       if (!navigator.mediaDevices?.getUserMedia) {
         setPhase('error')
@@ -711,8 +737,12 @@ function App() {
       }
 
       setErrorMessage('')
+      cameraActiveRef.current = false
+      handWasDetectedRef.current = false
+      setCameraActive(false)
       stopMediaStream(streamRef.current)
       streamRef.current = null
+      if (videoRef.current) videoRef.current.srcObject = null
       setPhase('waiting-for-hand')
 
       const videoConstraints: MediaTrackConstraints = requestedDeviceId
@@ -760,6 +790,12 @@ function App() {
         setCameraActive(true)
         machineRef.current = resetCaptureMachine()
         lastDetectorResultAtRef.current = performance.now()
+        lastDetectorVoteKeyRef.current = ''
+        console.info(`${VISION_LOG_PREFIX} camera active; inference can begin`, {
+          generation: detectorGenerationRef.current,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+        })
         setPhase('waiting-for-hand')
 
         const devices = await navigator.mediaDevices.enumerateDevices()
@@ -797,25 +833,26 @@ function App() {
     const detect = (now: number) => {
       const video = videoRef.current
       const worker = workerRef.current
-      const detector = settingsRef.current.handDetector
       const activeDetectorReady =
-        detector === 'mediapipe'
-          ? mediaPipeReadyRef.current
-          : detector === 'handtrack'
-            ? handTrackReadyRef.current
-            : ml5ReadyRef.current
+        mediaPipeReadyRef.current && ml5ReadyRef.current
 
       if (
         video &&
+        worker &&
         activeDetectorReady &&
         !document.hidden &&
         video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA
       ) {
         if (
+          !inferenceInFlightRef.current &&
           lastDetectorResultAtRef.current > 0 &&
           now - lastDetectorResultAtRef.current > DETECTOR_STALE_MS
         ) {
+          console.warn(`${VISION_LOG_PREFIX} detector results became stale`, {
+            staleForMs: Math.round(now - lastDetectorResultAtRef.current),
+          })
           machineRef.current = resetCaptureMachine()
+          handWasDetectedRef.current = false
           setLandmarks([])
           setPhase('detector-stalled')
         }
@@ -827,110 +864,136 @@ function App() {
           inferenceInFlightRef.current = true
           lastInferenceSentAtRef.current = now
           const generation = detectorGenerationRef.current
+          const cycleId = ++detectionCycleRef.current
+          const cycleStartedAt = performance.now()
+          const ml5Model = ml5ModelRef.current
 
-          if (detector === 'mediapipe' && worker) {
-            createImageBitmap(video)
-              .then((bitmap) => {
-                worker.postMessage(
-                  {
-                    type: 'detect',
-                    bitmap,
-                    timestamp: now,
+          console.debug(`${VISION_LOG_PREFIX} inference cycle started`, {
+            cycleId,
+            generation,
+          })
+
+          if (!ml5Model) {
+            inferenceInFlightRef.current = false
+            failCombinedDetection(
+              'One of the hand detectors became unavailable. Refresh the page to restart both detectors.',
+            )
+          } else {
+            const sourceWidth = video.videoWidth || video.width
+            const sourceHeight = video.videoHeight || video.height
+            const mediaPipeDetection = createImageBitmap(video).then(
+              (bitmap) =>
+                new Promise<HandLandmark[][]>((resolve, reject) => {
+                  if (generation !== detectorGenerationRef.current) {
+                    bitmap.close()
+                    resolve([])
+                    return
+                  }
+
+                  pendingMediaPipeDetectionRef.current = {
                     generation,
-                  },
-                  [bitmap],
-                )
-              })
-              .catch(() => {
-                inferenceInFlightRef.current = false
-              })
-          } else if (detector === 'handtrack' && handTrackModelRef.current) {
-            handTrackModelRef.current
-              .detect(video)
-              .then((predictions: HandTrackPrediction[]) => {
-                if (
-                  settingsRef.current.handDetector !== 'handtrack' ||
-                  generation !== detectorGenerationRef.current
-                ) {
-                  return
-                }
-                const boxes = predictions
-                  .filter(({ label }) => label !== 'face')
-                  .map(({ bbox, label, score }) => ({
-                    bbox,
-                    label,
-                    score: Number(score),
-                  }))
-                setLandmarks([])
-                setHandBoxes(boxes)
-                applyHandPresence(boxes.length > 0)
-              })
-              .catch((error) => {
-                if (
-                  settingsRef.current.handDetector !== 'handtrack' ||
-                  generation !== detectorGenerationRef.current
-                ) {
-                  return
-                }
-                handTrackReadyRef.current = false
-                detectorReadyRef.current = false
-                setHandTrackReady(false)
-                setPhase('error')
-                setErrorMessage(
-                  `Handtrack.js detection stopped: ${
-                    error instanceof Error ? error.message : 'inference failed'
-                  }. Try MediaPipe or reload the page.`,
-                )
-              })
-              .finally(() => {
-                inferenceInFlightRef.current = false
-              })
-          } else if (detector === 'ml5' && ml5ModelRef.current) {
-            ml5ModelRef.current
+                    cycleId,
+                    startedAt: cycleStartedAt,
+                    resolve,
+                    reject,
+                  }
+                  worker.postMessage(
+                    {
+                      type: 'detect',
+                      bitmap,
+                      timestamp: now,
+                      generation,
+                    },
+                    [bitmap],
+                  )
+                }),
+            )
+
+            const ml5Detection = ml5Model
               .detect(video)
               .then((predictions: Ml5HandPrediction[]) => {
-                if (
-                  settingsRef.current.handDetector !== 'ml5' ||
-                  generation !== detectorGenerationRef.current
-                ) {
-                  return
-                }
-
-                const sourceWidth = video.videoWidth || video.width
-                const sourceHeight = video.videoHeight || video.height
-                const detectedLandmarks = predictions.map(({ keypoints }) =>
+                console.debug(`${VISION_LOG_PREFIX} ml5 inference returned`, {
+                  cycleId,
+                  elapsedMs: Math.round(performance.now() - cycleStartedAt),
+                  hands: predictions.length,
+                })
+                return predictions.map(({ keypoints }) =>
                   keypoints.map(({ x, y, z }) => ({
                     x: x / sourceWidth,
                     y: y / sourceHeight,
                     z: z ?? 0,
                   })),
                 )
-                setHandBoxes([])
-                setLandmarks(detectedLandmarks)
-                applyHandPresence(detectedLandmarks.length > 0)
               })
+
+            void Promise.all([mediaPipeDetection, ml5Detection])
+              .then(
+                ([mediaPipeLandmarks, ml5Landmarks]) => {
+                  if (
+                    generation !== detectorGenerationRef.current ||
+                    !cameraActiveRef.current
+                  ) {
+                    return
+                  }
+
+                  setLandmarks([...mediaPipeLandmarks, ...ml5Landmarks])
+                  const votes = {
+                    mediapipe: mediaPipeLandmarks.length > 0,
+                    ml5: ml5Landmarks.length > 0,
+                  }
+                  const hasHand = anyHandDetectorVotedYes(votes)
+                  const voteKey = JSON.stringify(votes)
+                  const summary = {
+                    cycleId,
+                    generation,
+                    elapsedMs: Math.round(
+                      performance.now() - cycleStartedAt,
+                    ),
+                    votes,
+                    detections: {
+                      mediaPipeHands: mediaPipeLandmarks.length,
+                      ml5Hands: ml5Landmarks.length,
+                    },
+                    combinedHasHand: hasHand,
+                  }
+
+                  if (
+                    cycleId === 1 ||
+                    lastDetectorVoteKeyRef.current !== voteKey
+                  ) {
+                    console.info(
+                      `${VISION_LOG_PREFIX} inference result`,
+                      summary,
+                    )
+                    lastDetectorVoteKeyRef.current = voteKey
+                  } else {
+                    console.debug(
+                      `${VISION_LOG_PREFIX} inference result`,
+                      summary,
+                    )
+                  }
+
+                  applyHandPresence(hasHand)
+                },
+              )
               .catch((error) => {
                 if (
-                  settingsRef.current.handDetector !== 'ml5' ||
-                  generation !== detectorGenerationRef.current
+                  generation !== detectorGenerationRef.current ||
+                  !cameraActiveRef.current ||
+                  !detectorReadyRef.current
                 ) {
                   return
                 }
-                ml5ReadyRef.current = false
-                detectorReadyRef.current = false
-                setMl5Ready(false)
-                setPhase('error')
-                setErrorMessage(
-                  `ml5 HandPose detection stopped: ${
+
+                failCombinedDetection(
+                  `Combined hand detection stopped: ${
                     error instanceof Error ? error.message : 'inference failed'
-                  }. Try another detector or reload the page.`,
+                  }. Refresh the page to restart both detectors.`,
                 )
               })
               .finally(() => {
                 inferenceInFlightRef.current = false
               })
-          } else {
-            inferenceInFlightRef.current = false
           }
         }
       }
@@ -945,7 +1008,7 @@ function App() {
       }
       animationFrameRef.current = null
     }
-  }, [applyHandPresence, cameraActive])
+  }, [applyHandPresence, cameraActive, failCombinedDetection])
 
   useEffect(() => {
     const canvas = overlayRef.current
@@ -991,38 +1054,15 @@ function App() {
       }
     }
 
-    for (const { bbox, label, score } of handBoxes) {
-      const [x, y, boxWidth, boxHeight] = bbox
-      context.lineWidth = Math.max(3, width / 420)
-      context.strokeStyle = 'rgba(218, 255, 92, 0.95)'
-      context.fillStyle = '#dafe5c'
-      context.shadowColor = 'rgba(218, 255, 92, 0.35)'
-      context.shadowBlur = 8
-      context.strokeRect(x, y, boxWidth, boxHeight)
-
-      const boxLabel = `${label} ${Math.round(score * 100)}%`
-      const fontSize = Math.max(13, width / 75)
-      context.font = `600 ${fontSize}px Inter, sans-serif`
-      const labelWidth = context.measureText(boxLabel).width + 14
-      const labelHeight = fontSize + 10
-      context.fillRect(x, Math.max(0, y - labelHeight), labelWidth, labelHeight)
-      context.fillStyle = '#111'
-      context.shadowBlur = 0
-      context.fillText(
-        boxLabel,
-        x + 7,
-        Math.max(fontSize, y - (labelHeight - fontSize) / 2),
-      )
-    }
-  }, [handBoxes, landmarks])
+  }, [landmarks])
 
   useEffect(() => {
     const handleVisibility = () => {
       if (!cameraActiveRef.current) return
+      detectorGenerationRef.current += 1
       machineRef.current = resetCaptureMachine()
-      inferenceInFlightRef.current = false
+      handWasDetectedRef.current = false
       setLandmarks([])
-      setHandBoxes([])
       setRemainingMs(settingsRef.current.clearDelayMs)
       setPhase(document.hidden ? 'detector-stalled' : 'waiting-for-hand')
       if (!document.hidden) {
@@ -1035,28 +1075,28 @@ function App() {
       document.removeEventListener('visibilitychange', handleVisibility)
   }, [])
 
-  useEffect(
-    () => () => {
-      stopMediaStream(streamRef.current)
-      const pendingHandTrackModel = handTrackLoadRef.current
-      if (handTrackModelRef.current) {
-        handTrackModelRef.current.dispose()
-      } else {
-        void pendingHandTrackModel
-          ?.then((model) => model.dispose())
-          .catch(() => undefined)
-      }
-      const pendingMl5Model = ml5LoadRef.current
-      if (ml5ModelRef.current) {
-        ml5ModelRef.current.detectStop()
-      } else {
-        void pendingMl5Model
-          ?.then((model) => model.detectStop())
-          .catch(() => undefined)
-      }
-    },
-    [],
-  )
+  useEffect(() => {
+    if (modelCleanupTimerRef.current !== null) {
+      window.clearTimeout(modelCleanupTimerRef.current)
+      modelCleanupTimerRef.current = null
+    }
+
+    return () => {
+      // Delay disposal by one task so React Strict Mode's development-only
+      // effect replay can reuse models that are already loading.
+      modelCleanupTimerRef.current = window.setTimeout(() => {
+        stopMediaStream(streamRef.current)
+        const pendingMl5Model = ml5LoadRef.current
+        if (ml5ModelRef.current) {
+          ml5ModelRef.current.detectStop()
+        } else {
+          void pendingMl5Model
+            ?.then((model) => model.detectStop())
+            .catch(() => undefined)
+        }
+      }, 0)
+    }
+  }, [])
 
   useEffect(() => {
     if (!deletedFrame) return
@@ -1073,37 +1113,6 @@ function App() {
         detectorReadyRef.current ? 'waiting-for-hand' : 'loading-detector',
       )
     }
-  }
-
-  const handleHandDetectorChange = (handDetector: HandDetector) => {
-    if (handDetector === settingsRef.current.handDetector) return
-
-    detectorGenerationRef.current += 1
-    inferenceInFlightRef.current = false
-    lastInferenceSentAtRef.current = 0
-    machineRef.current = resetCaptureMachine()
-    setLandmarks([])
-    setHandBoxes([])
-    setRemainingMs(settingsRef.current.clearDelayMs)
-    setErrorMessage('')
-    updateSettings({ handDetector })
-
-    const ready =
-      handDetector === 'mediapipe'
-        ? mediaPipeReadyRef.current
-        : handDetector === 'handtrack'
-          ? handTrackReadyRef.current
-          : ml5ReadyRef.current
-    detectorReadyRef.current = ready
-    lastDetectorResultAtRef.current =
-      ready && cameraActiveRef.current ? performance.now() : 0
-    setPhase(
-      ready
-        ? cameraActiveRef.current
-          ? 'waiting-for-hand'
-          : 'camera-off'
-        : 'loading-detector',
-    )
   }
 
   const activeProject =
@@ -1325,9 +1334,9 @@ function App() {
             <h2 id="how-it-works-title">Your hand is the shutter.</h2>
             <p>
               No remote, timer routine, or repeated camera tapping. The
-              on-device hand detector knows when you are working and when the
-              set is clear. Choose MediaPipe, Handtrack.js, or ml5 HandPose in
-              the studio.
+              on-device hand detectors know when you are working and when the
+              set is clear. MediaPipe and ml5 HandPose run together, so a hand
+              found by either model pauses capture.
             </p>
           </header>
 
@@ -1419,7 +1428,7 @@ function App() {
                 <ShieldCheck size={19} aria-hidden="true" />
                 <span>
                   <strong>Detection stays on-device.</strong> Your live camera
-                  feed is processed by a model running inside this browser.
+                  feed is processed by two models running inside this browser.
                 </span>
               </li>
               <li>
@@ -1608,48 +1617,43 @@ function App() {
           </div>
 
           <aside className="control-panel">
-            <div className="control-panel__heading">
-              <span className="step-number">01</span>
-              <div>
-                <span className="eyebrow">Capture controls</span>
-                <h2>Set the rhythm</h2>
-              </div>
-            </div>
-
-            <div className="control-block control-block--switch">
-              <div>
-                <strong>Hands-free capture</strong>
-                <span>One frame per edit cycle</span>
-              </div>
-              <label className="switch">
-                <input
-                  type="checkbox"
-                  checked={settings.autoCaptureEnabled}
-                  onChange={(event) =>
-                    handleAutoCaptureChange(event.target.checked)
-                  }
-                />
-                <span aria-hidden="true" />
-                <span className="sr-only">Enable hands-free capture</span>
-              </label>
-            </div>
-
-            <div className="control-block">
-              <label className="select-label" htmlFor="hand-detector-select">
-                <strong>Hand detector</strong>
-                <span>Switch if one model misses your hands</span>
-              </label>
-              <select
-                id="hand-detector-select"
-                value={settings.handDetector}
-                onChange={(event) =>
-                  handleHandDetectorChange(event.target.value as HandDetector)
-                }
+            <div className="control-block control-block--capture-mode">
+              <div
+                className="capture-mode-toggle"
+                role="group"
+                aria-label="Automatic capture mode"
               >
-                <option value="mediapipe">MediaPipe · finger landmarks</option>
-                <option value="handtrack">Handtrack.js · gesture boxes</option>
-                <option value="ml5">ml5 HandPose · TF.js landmarks</option>
-              </select>
+                <button
+                  type="button"
+                  className={
+                    settings.autoCaptureEnabled
+                      ? 'capture-mode-toggle__option is-active'
+                      : 'capture-mode-toggle__option'
+                  }
+                  aria-pressed={settings.autoCaptureEnabled}
+                  onClick={() => handleAutoCaptureChange(true)}
+                >
+                  <span className="capture-mode-toggle__dot" aria-hidden="true" />
+                  Ready
+                </button>
+                <button
+                  type="button"
+                  className={
+                    settings.autoCaptureEnabled
+                      ? 'capture-mode-toggle__option'
+                      : 'capture-mode-toggle__option is-active'
+                  }
+                  aria-pressed={!settings.autoCaptureEnabled}
+                  onClick={() => handleAutoCaptureChange(false)}
+                >
+                  Stop
+                </button>
+              </div>
+              <p className="capture-mode-help">
+                {settings.autoCaptureEnabled
+                  ? 'Automatic capture is ready.'
+                  : 'Automatic capture is stopped. Take frame still works.'}
+              </p>
             </div>
 
             <div className="control-block delay-control">
@@ -1742,7 +1746,7 @@ function App() {
           <section className="gallery-section" aria-labelledby="gallery-title">
           <header className="section-header">
             <div className="section-header__title">
-              <span className="step-number">02</span>
+              <span className="step-number">01</span>
               <div>
                 <span className="eyebrow">
                   {activeProject?.name ?? 'Your sequence'}
