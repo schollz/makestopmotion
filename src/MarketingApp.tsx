@@ -1,11 +1,5 @@
 import {
   ArrowRight,
-  Camera,
-  CloudOff,
-  Database,
-  Download,
-  LaptopMinimal,
-  LockKeyhole,
   Mail,
   ShieldCheck,
 } from 'lucide-react'
@@ -182,11 +176,6 @@ function LandingPage() {
           </article>
         </div>
 
-        <p className="how-it-works__note">
-          <ShieldCheck size={18} aria-hidden="true" />
-          Live camera frames used for hand detection are analyzed in your
-          browser and are not saved.
-        </p>
       </section>
 
       <section
@@ -242,45 +231,6 @@ function LandingPage() {
           </a>
         </div>
 
-        <div className="data-control-card">
-          <div className="data-control-card__heading">
-            <LockKeyhole size={22} aria-hidden="true" />
-            <div>
-              <span>Your data path</span>
-              <strong>It starts and ends with you.</strong>
-            </div>
-          </div>
-
-          <div className="data-flow" aria-label="Local data flow">
-            <div className="data-flow__step">
-              <Camera size={24} aria-hidden="true" />
-              <span>Your camera</span>
-            </div>
-            <ArrowRight className="data-flow__arrow" size={18} aria-hidden="true" />
-            <div className="data-flow__step">
-              <LaptopMinimal size={24} aria-hidden="true" />
-              <span>Your browser</span>
-            </div>
-            <ArrowRight className="data-flow__arrow" size={18} aria-hidden="true" />
-            <div className="data-flow__step">
-              <Database size={24} aria-hidden="true" />
-              <span>Local storage</span>
-            </div>
-            <ArrowRight className="data-flow__arrow" size={18} aria-hidden="true" />
-            <div className="data-flow__step">
-              <Download size={24} aria-hidden="true" />
-              <span>Your export</span>
-            </div>
-          </div>
-
-          <div className="server-never">
-            <CloudOff size={30} aria-hidden="true" />
-            <div>
-              <strong>Our server is never in that path.</strong>
-              <span>No upload, cloud project, account, or server copy.</span>
-            </div>
-          </div>
-        </div>
       </section>
     </main>
   )
